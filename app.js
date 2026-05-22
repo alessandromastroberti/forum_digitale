@@ -146,27 +146,32 @@ window.showReportModal = function(type, targetId) {
 };
 
 async function router() {
-    const hash = window.location.hash || '#/';
-    if (hash === '#/') {
-        await renderHome();
-    } else if (hash === '#/admin') {
-        if (currentProfile && currentProfile.is_admin) await renderAdminDashboard();
-        else window.location.hash = '#/';
-    } else if (hash === '#/profilo') {
-        if (currentUser) await renderProfile();
-        else window.location.hash = '#/auth';
-    } else if (hash.startsWith('#/discussion/')) {
-        const id = hash.split('#/discussion/')[1];
-        await renderDiscussion(id);
-    } else if (hash === '#/auth') {
-        renderAuth();
-    } else {
-        appEl.innerHTML = '<div class="text-center mt-4"><h3>Pagina non trovata</h3><a href="#/" class="btn-link">Torna alla home</a></div>';
+    try {
+        const hash = window.location.hash || '#/';
+        if (hash === '#/') {
+            await renderHome();
+        } else if (hash === '#/admin') {
+            if (currentProfile && currentProfile.is_admin) await renderAdminDashboard();
+            else window.location.hash = '#/';
+        } else if (hash === '#/profilo') {
+            if (currentUser) await renderProfile();
+            else window.location.hash = '#/auth';
+        } else if (hash.startsWith('#/discussion/')) {
+            const id = hash.split('#/discussion/')[1];
+            await renderDiscussion(id);
+        } else if (hash === '#/auth') {
+            renderAuth();
+        } else {
+            appEl.innerHTML = '<div class="text-center mt-4"><h3>Pagina non trovata</h3><a href="#/" class="btn-link">Torna alla home</a></div>';
+        }
+    } catch (error) {
+        console.error("Router Error:", error);
+        appEl.innerHTML = `<div class="card mt-4 error-msg text-center"><h3>Errore nell'applicazione</h3><p>${error.message}</p><p>Prova a ricaricare la pagina.</p></div>`;
     }
 }
 
 function updateNavbar() {
-    const externalLink = `<a href="https://digitalefacile.regione.basilicata.it/fondamenti-di-intelligenza-artificiale/" target="_blank" class="nav-link">Vai al Sito</a>`;
+    const externalLink = `<a href="https://digitalefacile.regione.basilicata.it/fondamenti-di-intelligenza-artificiale/" target="_blank" rel="noopener noreferrer" class="nav-link">Vai al Sito</a>`;
     
     if (currentUser && currentProfile) {
         const adminBtn = currentProfile.is_admin ? `<a href="#/admin" class="nav-link">Dashboard Admin</a>` : '';
@@ -193,16 +198,28 @@ function updateNavbar() {
 async function initAuth() {
     const { data: { session } } = await supabaseClient.auth.getSession();
     await handleSession(session);
+    let lastEvent = null;
 
-    supabaseClient.auth.onAuthStateChange(async (event, session) => {
-        await handleSession(session);
+    supabaseClient.auth.onAuthStateChange(async (event, currentSession) => {
+        // Ignora eventi ridondanti se lo stato utente non cambia realmente
+        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION') {
+            if (lastEvent === 'SIGNED_IN' && currentUser && currentSession?.user?.id === currentUser.id) {
+                // L'utente è già loggato e non è cambiato. Non facciamo nulla che blocchi la UI.
+                return;
+            }
+        }
+
+        await handleSession(currentSession);
         updateNavbar();
+        
         if (event === 'SIGNED_IN') {
+            lastEvent = 'SIGNED_IN';
             await refreshUserData();
             if (window.location.hash === '#/auth') window.location.hash = '#/';
             else router();
         }
         if (event === 'SIGNED_OUT') {
+            lastEvent = 'SIGNED_OUT';
             userLikes.clear();
             userSaved.clear();
             router();
