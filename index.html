@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Forum Istituzionale</title>
+    <meta name="description" content="Forum di discussione istituzionale.">
+    <!-- Google Fonts: Inter per uno stile pulito e leggibile -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="index.css">
+</head>
+<body>
+    <header class="navbar">
+        <div class="container navbar-content">
+            <h1 class="logo"><a href="#/" id="nav-logo">Forum Istituzionale</a></h1>
+            <nav class="nav-actions" id="nav-actions">
+                <!-- Verrà popolato dinamicamente via JS -->
+            </nav>
+        </div>
+    </header>
+
+    <main class="container" id="app">
+        <!-- Il contenuto cambierà in base alla rotta -->
+    </main>
+
+    <footer class="footer">
+        <div class="container text-center">
+            <p>&copy; 2026 Forum Istituzionale. Piattaforma di discussione.</p>
+        </div>
+    </footer>
+
+    <!-- Templates -->
+    <template id="tmpl-home">
+        <div class="home-header">
+            <div class="search-container">
+                <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                <input type="text" id="search-input" placeholder="Cerca tra le discussioni..." class="search-bar" aria-label="Cerca discussioni">
+            </div>
+            <div id="new-discussion-btn-container"></div>
+        </div>
+        <div id="new-discussion-form-container" class="card mt-4" style="display: none;">
+            <h3>Nuova Discussione</h3>
+            <form id="new-discussion-form">
+                <div class="form-group">
+                    <label for="disc-title">Titolo</label>
+                    <input type="text" id="disc-title" required>
+                </div>
+                <div class="form-group">
+                    <label for="disc-content">Messaggio</label>
+                    <textarea id="disc-content" rows="5" required></textarea>
+                </div>
+                <div class="form-actions">
+                    <button type="button" id="cancel-discussion-btn" class="btn btn-secondary">Annulla</button>
+                    <button type="submit" class="btn btn-primary">Pubblica</button>
+                </div>
+            </form>
+        </div>
+        <div id="discussions-list" class="discussions-list mt-4">
+            <!-- Cards discussioni qui -->
+            <div class="text-center text-muted" id="loading-discussions">Caricamento in corso...</div>
+        </div>
+    </template>
+
+    <template id="tmpl-discussion">
+        <div class="mb-4">
+            <a href="#/" class="btn-link">&larr; Torna alle discussioni</a>
+        </div>
+        <div class="discussion-detail card" id="discussion-detail-container">
+            <div class="text-center text-muted">Caricamento in corso...</div>
+        </div>
+        
+        <div class="replies-section mt-4">
+            <h3>Risposte</h3>
+            <div id="replies-list" class="replies-list mt-2">
+                <!-- Risposte qui -->
+            </div>
+            
+            <div id="reply-form-container" class="card mt-4" style="display: none;">
+                <h4>Aggiungi una risposta</h4>
+                <form id="reply-form">
+                    <div class="form-group">
+                        <textarea id="reply-content" rows="4" required placeholder="Scrivi la tua risposta qui..."></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Invia Risposta</button>
+                </form>
+            </div>
+            <div id="reply-locked-msg" class="alert mt-4" style="display: none;">
+                Questa discussione è stata chiusa. Non è possibile inserire nuove risposte.
+            </div>
+            <div id="reply-login-msg" class="alert mt-4" style="display: none;">
+                Devi <a href="#/auth" class="btn-link">accedere</a> per poter rispondere.
+            </div>
+        </div>
+    </template>
+
+    <template id="tmpl-auth">
+        <div class="auth-container">
+            <div class="auth-card card">
+                <h2 id="auth-title">Accedi</h2>
+                <form id="auth-form">
+                    <div class="form-group" id="username-group" style="display: none;">
+                        <label for="username">Username</label>
+                        <input type="text" id="username" name="username">
+                    </div>
+                    <div class="form-group">
+                        <label for="email">Email</label>
+                        <input type="email" id="email" name="email" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="password">Password</label>
+                        <input type="password" id="password" name="password" required>
+                    </div>
+                    <div id="auth-error" class="error-msg"></div>
+                    <button type="submit" class="btn btn-primary w-100" id="auth-submit-btn">Accedi</button>
+                </form>
+                <p class="auth-switch text-center mt-4">
+                    <span id="auth-switch-text">Non hai un account?</span>
+                    <button type="button" id="auth-switch-btn" class="btn-link">Registrati</button>
+                </p>
+            </div>
+        </div>
+    </template>
+
+    <template id="tmpl-admin">
+        <div class="mb-4">
+            <h2 class="discussion-detail-title">Dashboard Amministratore</h2>
+            <p class="text-muted">Gestisci la piattaforma, visualizza le statistiche e amministra gli utenti.</p>
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-box">
+                <div class="stat-value" id="stat-users">...</div>
+                <div class="stat-label">Totale Utenti</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-value" id="stat-discussions">...</div>
+                <div class="stat-label">Discussioni</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-value" id="stat-replies">...</div>
+                <div class="stat-label">Risposte</div>
+            </div>
+        </div>
+
+        <div class="card mt-4">
+            <h3 class="mb-4">Gestione Utenti</h3>
+            <div class="table-responsive">
+                <table class="table" id="admin-users-table">
+                    <thead>
+                        <tr>
+                            <th>Username</th>
+                            <th>Ruolo Attuale</th>
+                            <th style="text-align: right;">Azioni</th>
+                        </tr>
+                    </thead>
+                    <tbody id="admin-users-tbody">
+                        <tr><td colspan="3" class="text-center text-muted">Caricamento utenti in corso...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </template>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="app.js"></script>
+</body>
+</html>
