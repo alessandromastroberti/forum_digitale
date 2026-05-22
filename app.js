@@ -5,6 +5,8 @@ const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_
 
 let currentUser = null;
 let currentProfile = null;
+let currentCategory = 'Tutte'; // 'Tutte', 'Tematiche IA (Webinar)', 'Problemi Tecnici'
+let userLikes = new Set(); // Set of discussion_ids the user has liked
 
 // Utility elements
 const appEl = document.getElementById('app');
@@ -12,16 +14,109 @@ const navActionsEl = document.getElementById('nav-actions');
 
 // Utility to format dates
 function formatDate(dateString) {
+    if (!dateString) return '';
     const d = new Date(dateString);
     return d.toLocaleDateString('it-IT') + ' ' + d.toLocaleTimeString('it-IT', {hour: '2-digit', minute:'2-digit'});
 }
 
 // Escaping HTML per sicurezza
 function escapeHTML(str) {
+    if (!str) return '';
     const div = document.createElement('div');
     div.innerText = str;
     return div.innerHTML;
 }
+
+// Generatore SVG per il Cuore
+function getHeartSvg(filled = false) {
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+    </svg>`;
+}
+
+// Refresh dei like dell'utente corrente
+async function refreshUserLikes() {
+    userLikes.clear();
+    if (!currentUser) return;
+    const { data } = await supabaseClient.from('likes').select('discussion_id').eq('user_id', currentUser.id);
+    if (data) {
+        data.forEach(like => userLikes.add(like.discussion_id));
+    }
+}
+
+// Funzione globale per il Toggle del Like
+window.toggleLike = async function(discussionId, event) {
+    if (event) {
+        event.stopPropagation(); // Evita di cliccare la card
+    }
+    if (!currentUser) {
+        window.location.hash = '#/auth';
+        return;
+    }
+
+    const isLiked = userLikes.has(discussionId);
+    
+    // Aggiornamento ottimistico dell'UI
+    const btn = document.querySelector(`.like-btn[data-id="${discussionId}"]`);
+    let span;
+    if (btn) {
+        span = btn.querySelector('span');
+        btn.classList.toggle('liked', !isLiked);
+    }
+
+    if (isLiked) {
+        userLikes.delete(discussionId);
+        if (span) span.innerText = Math.max(0, parseInt(span.innerText) - 1);
+        await supabaseClient.from('likes').delete().match({ discussion_id: discussionId, user_id: currentUser.id });
+    } else {
+        userLikes.add(discussionId);
+        if (span) span.innerText = parseInt(span.innerText) + 1;
+        await supabaseClient.from('likes').insert([{ discussion_id: discussionId, user_id: currentUser.id }]);
+    }
+    
+    // Se siamo nel dettaglio, il re-render viene gestito bene (ottimistico ok). 
+    // Nella home non forziamo il ricaricamento completo per non far saltare l'utente.
+};
+
+// Funzione per la Modale di Segnalazione
+window.showReportModal = function(type, targetId) {
+    if (!currentUser) {
+        window.location.hash = '#/auth';
+        return;
+    }
+    const template = document.getElementById('tmpl-report-modal').content.cloneNode(true);
+    const container = document.getElementById('modal-container');
+    container.innerHTML = '';
+    container.appendChild(template);
+
+    document.getElementById('cancel-report-btn').onclick = () => {
+        container.innerHTML = '';
+    };
+
+    document.getElementById('report-form').onsubmit = async (e) => {
+        e.preventDefault();
+        const reason = document.getElementById('report-reason').value;
+        const submitBtn = e.target.querySelector('button[type="submit"]');
+        submitBtn.disabled = true;
+
+        const payload = {
+            reporter_id: currentUser.id,
+            reason: reason,
+            discussion_id: type === 'discussion' ? targetId : null,
+            reply_id: type === 'reply' ? targetId : null
+        };
+
+        const { error } = await supabaseClient.from('reports').insert([payload]);
+
+        if (error) {
+            alert('Errore invio segnalazione: ' + error.message);
+            submitBtn.disabled = false;
+        } else {
+            alert('Segnalazione inviata con successo. Grazie per il contributo.');
+            container.innerHTML = '';
+        }
+    };
+};
 
 // Router
 async function router() {
@@ -73,15 +168,22 @@ async function initAuth() {
     supabaseClient.auth.onAuthStateChange(async (event, session) => {
         await handleSession(session);
         updateNavbar();
-        if (event === 'SIGNED_IN' && window.location.hash === '#/auth') {
-            window.location.hash = '#/';
+        if (event === 'SIGNED_IN') {
+            await refreshUserLikes();
+            if (window.location.hash === '#/auth') {
+                window.location.hash = '#/';
+            } else {
+                router(); // Ricarica la vista attuale
+            }
         }
         if (event === 'SIGNED_OUT') {
+            userLikes.clear();
             router();
         }
     });
 
     // Caricamento iniziale
+    await refreshUserLikes();
     updateNavbar();
     router();
     window.addEventListener('hashchange', router);
@@ -112,6 +214,24 @@ async function renderHome() {
     appEl.innerHTML = '';
     appEl.appendChild(template);
 
+    // Gestione Tabs
+    const tabs = document.querySelectorAll('.tab-btn');
+    tabs.forEach(tab => {
+        // Imposta stato iniziale basato su currentCategory globale
+        if (tab.dataset.category === currentCategory) {
+            tab.classList.add('active');
+        } else {
+            tab.classList.remove('active');
+        }
+
+        tab.addEventListener('click', (e) => {
+            document.querySelectorAll('.tab-btn').forEach(t => t.classList.remove('active'));
+            e.target.classList.add('active');
+            currentCategory = e.target.dataset.category;
+            loadDiscussions(document.getElementById('search-input').value);
+        });
+    });
+
     const newBtnContainer = document.getElementById('new-discussion-btn-container');
     const newFormContainer = document.getElementById('new-discussion-form-container');
     
@@ -131,12 +251,14 @@ async function renderHome() {
             e.preventDefault();
             const title = document.getElementById('disc-title').value;
             const content = document.getElementById('disc-content').value;
+            const category = document.getElementById('disc-category').value;
+            
             const submitBtn = e.target.querySelector('button[type="submit"]');
             submitBtn.disabled = true;
 
             const { error } = await supabaseClient
                 .from('discussions')
-                .insert([{ title, content, user_id: currentUser.id }]);
+                .insert([{ title, content, category, user_id: currentUser.id }]);
 
             if (error) {
                 alert('Errore durante la creazione: ' + error.message);
@@ -152,7 +274,7 @@ async function renderHome() {
     }
 
     const searchInput = document.getElementById('search-input');
-    // Debounce semplice per la ricerca
+    // Debounce
     let searchTimeout;
     searchInput.addEventListener('input', (e) => {
         clearTimeout(searchTimeout);
@@ -171,11 +293,19 @@ async function loadDiscussions(searchQuery = '') {
     let query = supabaseClient
         .from('discussions')
         .select(`
-            id, title, content, created_at, is_locked,
+            id, title, content, category, likes_count, created_at, is_locked,
             profiles (username)
         `)
+        // Ordinamento per popolarità e poi data
+        .order('likes_count', { ascending: false })
         .order('created_at', { ascending: false });
 
+    // Filtro per Categoria
+    if (currentCategory !== 'Tutte') {
+        query = query.eq('category', currentCategory);
+    }
+
+    // Ricerca testuale
     if (searchQuery) {
         query = query.or(`title.ilike.%${searchQuery}%,content.ilike.%${searchQuery}%`);
     }
@@ -202,15 +332,22 @@ async function loadDiscussions(searchQuery = '') {
         const excerpt = escapeHTML(disc.content).substring(0, 150) + (disc.content.length > 150 ? '...' : '');
         const username = disc.profiles ? escapeHTML(disc.profiles.username) : 'Utente Sconosciuto';
 
+        const isLiked = userLikes.has(disc.id);
+        const likeClass = isLiked ? 'like-btn liked' : 'like-btn';
+
         div.innerHTML = `
             <div class="discussion-card-title">
-                <span>${escapeHTML(disc.title)}</span>
+                <span><span class="badge badge-category">${escapeHTML(disc.category)}</span> ${escapeHTML(disc.title)}</span>
                 ${lockedBadge}
             </div>
             <div class="discussion-card-excerpt">${excerpt}</div>
-            <div class="discussion-card-meta">
-                <span>Autore: <strong>${username}</strong></span>
-                <span>${formatDate(disc.created_at)}</span>
+            <div class="card-actions">
+                <div class="discussion-card-meta" style="border:none; padding:0;">
+                    <span>Autore: <strong>${username}</strong> &bull; ${formatDate(disc.created_at)}</span>
+                </div>
+                <button class="${likeClass}" data-id="${disc.id}" onclick="toggleLike('${disc.id}', event)">
+                    ${getHeartSvg()} <span>${disc.likes_count || 0}</span>
+                </button>
             </div>
         `;
         listEl.appendChild(div);
@@ -245,13 +382,15 @@ async function renderDiscussion(id) {
 
     const isAdmin = currentProfile?.is_admin;
     const username = disc.profiles ? escapeHTML(disc.profiles.username) : 'Utente Sconosciuto';
+    const isLiked = userLikes.has(disc.id);
+    const likeClass = isLiked ? 'like-btn liked' : 'like-btn';
 
     let adminActionsHtml = '';
     if (isAdmin) {
         adminActionsHtml = `
             <div class="admin-actions">
                 <button id="admin-lock-btn" class="btn btn-secondary btn-sm">${disc.is_locked ? 'Sblocca Discussione' : 'Blocca Discussione'}</button>
-                <button id="admin-del-disc-btn" class="btn btn-danger btn-sm">Elimina Discussione</button>
+                <button id="admin-del-disc-btn" class="btn btn-danger btn-sm">Elimina Discussione (Admin)</button>
             </div>
         `;
     }
@@ -263,10 +402,17 @@ async function renderDiscussion(id) {
                 ${disc.is_locked ? '<span class="badge badge-locked" style="font-size:0.5em; vertical-align:middle; margin-left:10px;">Chiusa</span>' : ''}
             </h2>
             <div class="discussion-detail-meta">
-                Aperta da <strong>${username}</strong> il ${formatDate(disc.created_at)}
+                <span class="badge badge-category">${escapeHTML(disc.category)}</span> Aperta da <strong>${username}</strong> il ${formatDate(disc.created_at)}
             </div>
         </div>
         <div class="discussion-detail-content">${escapeHTML(disc.content)}</div>
+        
+        <div class="card-actions mt-4">
+            <button class="${likeClass}" data-id="${disc.id}" onclick="toggleLike('${disc.id}')">
+                ${getHeartSvg()} <span>${disc.likes_count || 0}</span>
+            </button>
+            <button class="btn-report" onclick="showReportModal('discussion', '${disc.id}')">Segnala</button>
+        </div>
         ${adminActionsHtml}
     `;
 
@@ -351,16 +497,18 @@ async function loadReplies(discussionId, isAdmin) {
 
         let adminBtn = '';
         if (isAdmin) {
-            adminBtn = `<button class="btn btn-danger btn-sm" onclick="deleteReply('${r.id}', '${discussionId}')">Elimina Risposta</button>`;
+            adminBtn = `<button class="btn btn-danger btn-sm" onclick="deleteReply('${r.id}', '${discussionId}')">Elimina (Admin)</button>`;
         }
 
         div.innerHTML = `
             <div class="reply-header">
-                <strong>${username}</strong>
-                <span>${formatDate(r.created_at)}</span>
+                <span><strong>${username}</strong> &bull; ${formatDate(r.created_at)}</span>
+                <div>
+                    <button class="btn-report" style="margin-right:10px;" onclick="showReportModal('reply', '${r.id}')">Segnala</button>
+                    ${adminBtn}
+                </div>
             </div>
             <div class="reply-content">${escapeHTML(r.content)}</div>
-            ${adminBtn ? `<div class="mt-2 text-right" style="text-align:right;">${adminBtn}</div>` : ''}
         `;
         listEl.appendChild(div);
     });
@@ -445,13 +593,12 @@ function renderAuth() {
                 
                 if (loginErr) {
                     errorMsg.style.color = 'var(--danger-color)';
-                    errorMsg.innerText = 'Registrazione completata, ma impossibile accedere automaticamente. Riprova.';
+                    errorMsg.innerText = 'Registrazione completata, ma impossibile accedere. Riprova.';
                     switchBtn.click();
                     authSubmitBtn.disabled = false;
                 } else {
                     errorMsg.style.color = '#28a745';
-                    errorMsg.innerText = 'Accesso effettuato con successo!';
-                    // onAuthStateChange gestirà il redirect alla home
+                    errorMsg.innerText = 'Accesso effettuato!';
                 }
             }
         }
@@ -477,36 +624,82 @@ async function renderAdminDashboard() {
     document.getElementById('stat-discussions').innerText = discCount.count || 0;
     document.getElementById('stat-replies').innerText = repliesCount.count || 0;
 
-    // Carica utenti
+    // Carica Utenti
     const tbody = document.getElementById('admin-users-tbody');
-    const { data: users, error } = await supabaseClient
+    const { data: users, error: usersErr } = await supabaseClient
         .from('profiles')
         .select('*')
         .order('username', { ascending: true });
 
-    if (error) {
-        tbody.innerHTML = '<tr><td colspan="3" class="error-msg">Errore caricamento utenti</td></tr>';
-        return;
+    if (!usersErr) {
+        tbody.innerHTML = '';
+        users.forEach(u => {
+            const tr = document.createElement('tr');
+            const role = u.is_admin ? '<span class="badge badge-locked" style="background-color:#003366;color:#fff;">Admin</span>' : 'Utente';
+            const actionBtn = u.is_admin 
+                ? `<button class="btn btn-secondary btn-sm" onclick="toggleUserRole('${u.id}', true)">Rendi Utente</button>`
+                : `<button class="btn btn-primary btn-sm" onclick="toggleUserRole('${u.id}', false)">Promuovi ad Admin</button>`;
+
+            const actionHtml = (u.id === currentUser.id) ? '<span class="text-muted">Tu</span>' : actionBtn;
+
+            tr.innerHTML = `
+                <td><strong>${escapeHTML(u.username)}</strong></td>
+                <td>${role}</td>
+                <td style="text-align: right;">${actionHtml}</td>
+            `;
+            tbody.appendChild(tr);
+        });
     }
 
-    tbody.innerHTML = '';
-    users.forEach(u => {
-        const tr = document.createElement('tr');
-        const role = u.is_admin ? '<span class="badge badge-locked" style="background-color:#003366;color:#fff;">Admin</span>' : 'Utente';
-        const actionBtn = u.is_admin 
-            ? `<button class="btn btn-secondary btn-sm" onclick="toggleUserRole('${u.id}', true)">Rendi Utente</button>`
-            : `<button class="btn btn-primary btn-sm" onclick="toggleUserRole('${u.id}', false)">Promuovi ad Admin</button>`;
+    // Carica Segnalazioni
+    const reportsTbody = document.getElementById('admin-reports-tbody');
+    const { data: reports, error: reportsErr } = await supabaseClient
+        .from('reports')
+        .select(`
+            *,
+            profiles (username),
+            discussions (title),
+            replies (content)
+        `)
+        .eq('is_archived', false)
+        .order('created_at', { ascending: false });
 
-        // Non permettere all'admin di de-promuovere se stesso per evitare blocchi
-        const actionHtml = (u.id === currentUser.id) ? '<span class="text-muted">Tu</span>' : actionBtn;
+    if (!reportsErr) {
+        if (reports.length === 0) {
+            reportsTbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Nessuna segnalazione attiva.</td></tr>';
+        } else {
+            reportsTbody.innerHTML = '';
+            reports.forEach(rep => {
+                const tr = document.createElement('tr');
+                const reporter = rep.profiles ? escapeHTML(rep.profiles.username) : 'Anonimo';
+                
+                let typeHtml = '';
+                let targetId = '';
+                let contentType = '';
+                if (rep.discussion_id) {
+                    typeHtml = `<span class="badge" style="background-color:#e0f2fe; color:#0369a1;">Discussione</span><br><small>${escapeHTML(rep.discussions?.title).substring(0,30)}...</small>`;
+                    targetId = rep.discussion_id;
+                    contentType = 'discussion';
+                } else if (rep.reply_id) {
+                    typeHtml = `<span class="badge" style="background-color:#f1f5f9; color:#475569;">Risposta</span><br><small>${escapeHTML(rep.replies?.content).substring(0,30)}...</small>`;
+                    targetId = rep.reply_id;
+                    contentType = 'reply';
+                }
 
-        tr.innerHTML = `
-            <td><strong>${escapeHTML(u.username)}</strong></td>
-            <td>${role}</td>
-            <td style="text-align: right;">${actionHtml}</td>
-        `;
-        tbody.appendChild(tr);
-    });
+                tr.innerHTML = `
+                    <td>${formatDate(rep.created_at)}</td>
+                    <td><strong>${reporter}</strong></td>
+                    <td>${typeHtml}</td>
+                    <td>${escapeHTML(rep.reason)}</td>
+                    <td style="text-align: right; white-space: nowrap;">
+                        <button class="btn btn-secondary btn-sm" onclick="archiveReport('${rep.id}')">Archivia</button>
+                        <button class="btn btn-danger btn-sm" onclick="deleteReportedContent('${contentType}', '${targetId}', '${rep.id}')">Elimina Contenuto</button>
+                    </td>
+                `;
+                reportsTbody.appendChild(tr);
+            });
+        }
+    }
 }
 
 window.toggleUserRole = async function(userId, currentIsAdmin) {
@@ -516,11 +709,24 @@ window.toggleUserRole = async function(userId, currentIsAdmin) {
             .update({ is_admin: !currentIsAdmin })
             .eq('id', userId);
             
-        if (error) {
-            alert('Errore: ' + error.message);
-        } else {
-            renderAdminDashboard();
+        if (!error) renderAdminDashboard();
+    }
+};
+
+window.archiveReport = async function(reportId) {
+    const { error } = await supabaseClient.from('reports').update({ is_archived: true }).eq('id', reportId);
+    if (!error) renderAdminDashboard();
+};
+
+window.deleteReportedContent = async function(type, targetId, reportId) {
+    if (confirm('ATTENZIONE: Eliminare il contenuto originale rimuoverà fisicamente il post/risposta dal database. Procedere?')) {
+        if (type === 'discussion') {
+            await supabaseClient.from('discussions').delete().eq('id', targetId);
+        } else if (type === 'reply') {
+            await supabaseClient.from('replies').delete().eq('id', targetId);
         }
+        // Il report sparisce in automatico grazie a ON DELETE CASCADE, ma se fallisse lo archiviamo
+        await archiveReport(reportId); 
     }
 };
 
