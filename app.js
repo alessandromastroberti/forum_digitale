@@ -166,14 +166,17 @@ async function router() {
 }
 
 function updateNavbar() {
+    const externalLink = `<a href="https://digitalefacile.regione.basilicata.it/fondamenti-di-intelligenza-artificiale/" target="_blank" class="nav-link">Vai al Sito</a>`;
+    
     if (currentUser && currentProfile) {
-        const adminBtn = currentProfile.is_admin ? `<a href="#/admin" class="btn btn-secondary btn-sm" style="margin-right:10px;">Dashboard Admin</a>` : '';
-        const profileBtn = `<a href="#/profilo" class="btn btn-secondary btn-sm" style="margin-right:10px;">Il mio Profilo</a>`;
+        const adminBtn = currentProfile.is_admin ? `<a href="#/admin" class="nav-link">Dashboard Admin</a>` : '';
+        const profileBtn = `<a href="#/profilo" class="nav-link">Il mio Profilo</a>`;
         navActionsEl.innerHTML = `
+            ${externalLink}
             ${profileBtn}
             ${adminBtn}
-            <span class="nav-user" style="margin-right:10px;">Benvenuto, ${escapeHTML(currentProfile.username)}${currentProfile.is_admin ? ' <span class="badge badge-locked" style="background-color:#003366;color:#fff;">Admin</span>' : ''}</span>
-            <button id="logout-btn" class="btn btn-secondary btn-sm">Logout</button>
+            <span class="nav-user">Benvenuto, ${escapeHTML(currentProfile.username)}${currentProfile.is_admin ? ' <span class="badge badge-locked" style="margin-left:4px;">Admin</span>' : ''}</span>
+            <button id="logout-btn" class="nav-link">Logout</button>
         `;
         document.getElementById('logout-btn').addEventListener('click', async () => {
             await supabaseClient.auth.signOut();
@@ -181,7 +184,8 @@ function updateNavbar() {
         });
     } else {
         navActionsEl.innerHTML = `
-            <a href="#/auth" class="btn btn-secondary btn-sm">Accedi / Registrati</a>
+            ${externalLink}
+            <a href="#/auth" class="nav-link">Accedi / Registrati</a>
         `;
     }
 }
