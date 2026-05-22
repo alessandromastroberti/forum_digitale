@@ -219,6 +219,22 @@
         </div>
     </template>
 
+    <template id="tmpl-profile">
+        <div class="mb-4">
+            <h2 class="discussion-detail-title">Il mio Profilo</h2>
+            <p class="text-muted">Gestisci le tue discussioni e ritrova i contenuti che hai salvato nei preferiti.</p>
+        </div>
+
+        <div class="category-tabs mt-4">
+            <button class="tab-btn profile-tab-btn active" data-tab="mie-discussioni">Le mie Discussioni</button>
+            <button class="tab-btn profile-tab-btn" data-tab="miei-preferiti">I miei Preferiti</button>
+        </div>
+
+        <div id="profile-content-list" class="discussions-list mt-4">
+            <div class="text-center text-muted">Caricamento in corso...</div>
+        </div>
+    </template>
+
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="app.js"></script>
 </body>
