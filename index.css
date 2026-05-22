@@ -1,31 +1,27 @@
-/* =========================================
-   DESIGN SYSTEM - DARK BLUE & YELLOW
-   Ispirato a "Punto Digitale Facile"
-   ========================================= */
+@import url('https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;600;700&display=swap');
 
 :root {
-    /* Palette Dark Mode Istituzionale */
-    --bg-gradient: linear-gradient(135deg, #022047 0%, #064082 100%);
-    --bg-solid: #022047; /* Fallback e Footer */
-    --card-bg: rgba(255, 255, 255, 0.08); /* Sfondo traslucido per le card */
-    --card-bg-hover: rgba(255, 255, 255, 0.12);
+    /* Palette Dark Mode Istituzionale (Stitch Inspired) */
+    --bg-solid: #003067; 
+    --card-bg: #003a7a;
+    --card-bg-hover: #004085;
     
-    --text-main: #ffffff; /* Testo leggibile su scuro */
-    --text-muted: #e2e8f0; /* Grigio-azzurro chiaro */
+    --text-main: #ffffff;
+    --text-muted: #c3c6d3; 
     
-    --accent-yellow: #EFEF25; /* Giallo acceso istituzionale */
-    --accent-blue: #00A3FF; /* Azzurro vivo per interazioni secondarie */
+    --accent-yellow: #fcd400; /* Giallo acceso Stitch */
+    --accent-blue: #abc7ff; /* Azzurro Stitch */
     
-    --border-subtle: rgba(255, 255, 255, 0.2);
-    --border-accent: rgba(239, 239, 37, 0.5); /* Bordo giallo traslucido */
+    --border-subtle: rgba(171, 199, 255, 0.2); /* Bordo azzurro tenue */
+    --border-accent: rgba(252, 212, 0, 0.5); 
     
-    --danger-color: #fc8181;
+    --danger-color: #ffb4ab;
     --success-color: #68d391;
-    --warning-color: #f6e05e;
+    --warning-color: #ffe16d;
 
     /* Struttura */
     --container-width: 1000px;
-    --border-radius: 8px;
+    --border-radius: 12px;
     --shadow-md: 0 8px 16px rgba(0, 0, 0, 0.2);
     --shadow-hover: 0 12px 24px rgba(0, 0, 0, 0.3);
 }
@@ -37,10 +33,11 @@
 }
 
 body {
-    font-family: 'Inter', system-ui, -apple-system, sans-serif;
-    background: var(--bg-solid);
-    background-image: var(--bg-gradient);
-    background-attachment: fixed;
+    font-family: 'Public Sans', system-ui, -apple-system, sans-serif;
+    background-color: var(--bg-solid);
+    /* Pattern a puntini gialli traslucidi come nel template Stitch */
+    background-image: radial-gradient(circle at 2px 2px, rgba(252, 212, 0, 0.05) 1px, transparent 0);
+    background-size: 32px 32px;
     color: var(--text-main);
     line-height: 1.6;
     -webkit-font-smoothing: antialiased;
